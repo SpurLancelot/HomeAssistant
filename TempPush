@@ -2,14 +2,13 @@ blueprint:
   domain: automation
   name: Sonoff TRVZB External Temperature Sensor Calibration
   description: |
-    ## Sonoff TRVZB External Temperature Sensor Calibration (v1.0.2)
+    ## Sonoff TRVZB External Temperature Sensor Calibration (v1.0.3)
 
-    Synchronises the external temperature from a room sensor (e.g. Sonoff SNZB-02)
-    to one or more Sonoff TRVZB radiator valves.
+    Synchronises external room temperature (e.g. Sonoff SNZB-02) to one or more Sonoff TRVZB valves.
 
-    In addition to triggering on temperature changes, this blueprint includes
-    a configurable "heartbeat" interval to periodically re-push the temperature,
-    preventing the TRV from entering fail-safe mode during periods of stable temperature.
+    Triggers:
+    - On sensor state change
+    - Heartbeat: checks every minute, and re-pushes temperature when the current minute is divisible by the configured interval.
 
   input:
     external_temperature_sensor:
@@ -34,8 +33,7 @@ blueprint:
     heartbeat_minutes:
       name: Heartbeat interval (minutes)
       description: >
-        How often the external temperature should be re-sent to the TRV(s),
-        even if the temperature has not changed.
+        How often to re-send the temperature even if it hasn't changed.
         Recommended: 5–15 minutes.
       default: 10
       selector:
@@ -51,14 +49,25 @@ triggers:
   - trigger: state
     entity_id: !input external_temperature_sensor
 
-  # Heartbeat trigger
+  # Heartbeat tick: every minute (we'll filter using a condition)
   - trigger: time_pattern
-    minutes: "/{{ !input heartbeat_minutes }}"
+    minutes: "/1"
 
 variables:
   external_temperature_sensor: !input external_temperature_sensor
+  heartbeat_minutes: !input heartbeat_minutes
 
 conditions:
+  # Only run on the heartbeat trigger when minute % heartbeat == 0
+  - condition: template
+    value_template: >
+      {% if trigger.platform == 'time_pattern' %}
+        {{ (now().minute % (heartbeat_minutes | int(10))) == 0 }}
+      {% else %}
+        true
+      {% endif %}
+
+  # Only run if we have a valid numeric temperature
   - condition: template
     value_template: >
       {{ states(external_temperature_sensor) | is_number }}
