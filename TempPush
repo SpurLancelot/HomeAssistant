@@ -1,0 +1,72 @@
+blueprint:
+  domain: automation
+  name: Sonoff TRVZB External Temperature Sensor Calibration
+  description: |
+    ## Sonoff TRVZB External Temperature Sensor Calibration (v1.0.2)
+
+    Synchronises the external temperature from a room sensor (e.g. Sonoff SNZB-02)
+    to one or more Sonoff TRVZB radiator valves.
+
+    In addition to triggering on temperature changes, this blueprint includes
+    a configurable "heartbeat" interval to periodically re-push the temperature,
+    preventing the TRV from entering fail-safe mode during periods of stable temperature.
+
+  input:
+    external_temperature_sensor:
+      name: External Temperature Sensor
+      description: The entity representing the external room temperature.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: temperature
+
+    trv_external_temperature_input:
+      name: Sonoff TRVZB(s)
+      description: The external temperature input entity of one or more TRVs.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: number
+              device_class: temperature
+
+    heartbeat_minutes:
+      name: Heartbeat interval (minutes)
+      description: >
+        How often the external temperature should be re-sent to the TRV(s),
+        even if the temperature has not changed.
+        Recommended: 5–15 minutes.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: minutes
+          mode: slider
+
+triggers:
+  # Trigger when the sensor updates
+  - trigger: state
+    entity_id: !input external_temperature_sensor
+
+  # Heartbeat trigger
+  - trigger: time_pattern
+    minutes: "/{{ !input heartbeat_minutes }}"
+
+variables:
+  external_temperature_sensor: !input external_temperature_sensor
+
+conditions:
+  - condition: template
+    value_template: >
+      {{ states(external_temperature_sensor) | is_number }}
+
+actions:
+  - action: number.set_value
+    data:
+      value: "{{ states(external_temperature_sensor) | float }}"
+      entity_id: !input trv_external_temperature_input
+
+mode: single
